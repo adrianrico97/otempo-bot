@@ -1,7 +1,5 @@
 import requests
 import xml.etree.ElementTree as ET
-import jellyfish
-import csv
 import re
 from datetime import date, datetime
 
@@ -67,25 +65,6 @@ class Aemet:
     code = int(re.sub('n', '', code))
     return Aemet.SKY_STATE_CODES_DESCRIPTION[code][language]
 
-  def most_similar_municipality_code(municipality_name):
-    # Get municipalities from CSV file. CSV was downloaded from INE website:
-    # https://www.ine.es/daco/daco42/codmun/codmunmapa.htm
-    filename = 'data/municipalities_codes.csv'
-    municipalities = []
-    with open(filename, newline='') as csvfile:
-      reader = csv.reader(csvfile, delimiter=';')
-      for row in reader:
-        # If municipality name is similar to the one provided, add it to the list
-        if jellyfish.jaro_winkler_similarity(municipality_name, row[4]) > 0.9:
-          municipalities.append(row)
-    # Get the most similar municipality
-    municipality_data = sorted(municipalities, key=lambda x: jellyfish.jaro_winkler_similarity(municipality_name, x[4]), reverse=True)
-    if len(municipality_data) > 0:
-      municipality_data = municipality_data[0]
-      return (f'{municipality_data[1]}{municipality_data[2]}', municipality_data[4])
-    else:
-      return (None, None)
-
   def __parse_daily_forecast(data, forecast_date):
     forecast_data = {}
     # Get location data
@@ -123,6 +102,13 @@ class Aemet:
     forecast_data['rain_probability'] = {}
     for rain_probability in today_data.findall('prob_precipitacion'):
       forecast_data['rain_probability'][rain_probability.attrib['periodo']] = rain_probability.text
+    # Get wind
+    forecast_data['wind'] = {}
+    for wind in today_data.findall('viento'):
+      forecast_data['wind'][wind.attrib['periodo']] = {
+        'direction': wind.find('direccion').text,
+        'speed': wind.find('velocidad').text,
+      }
     # Get snow qouta
     forecast_data['snow_quota'] = {}
     for cota_nieve_prov in today_data.findall('cota_nieve_prov'):

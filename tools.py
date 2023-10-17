@@ -1,3 +1,5 @@
+import jellyfish
+import csv
 
 def get_ranges(lst):
   ranges = []
@@ -61,3 +63,41 @@ def get_translated_weekday(date):
 
 def get_full_translated_date(date):
   return f'{get_translated_weekday(date)}, {date.day} de {get_translated_month(date)} de {date.year}'
+
+def get_galician_most_similar_municipality_code(municipality_name):
+  # Get municipalities from CSV file. CSV was downloaded from INE website:
+  # https://www.ine.es/daco/daco42/codmun/codmunmapa.htm
+  filename = 'data/meteogalicia_municipalities.csv'
+  municipalities = []
+  with open(filename, newline='') as csvfile:
+    reader = csv.reader(csvfile, delimiter=';')
+    for row in reader:
+      # If municipality name is similar to the one provided, add it to the list
+      if jellyfish.jaro_winkler_similarity(municipality_name, row[1]) > 0.8:
+        municipalities.append(row)
+  # Get the most similar municipality
+  municipality_data = sorted(municipalities, key=lambda x: jellyfish.jaro_winkler_similarity(municipality_name, x[1]), reverse=True)
+  if len(municipality_data) > 0:
+    municipality_data = municipality_data[0]
+    return (municipality_data[0], municipality_data[1])
+  else:
+    return (None, None)
+
+def get_spain_most_similar_municipality_code(municipality_name):
+  # Get municipalities from CSV file. CSV was downloaded from INE website:
+  # https://www.ine.es/daco/daco42/codmun/codmunmapa.htm
+  filename = 'data/municipalities_codes.csv'
+  municipalities = []
+  with open(filename, newline='') as csvfile:
+    reader = csv.reader(csvfile, delimiter=';')
+    for row in reader:
+      # If municipality name is similar to the one provided, add it to the list
+      if jellyfish.jaro_winkler_similarity(municipality_name, row[4]) > 0.9:
+        municipalities.append(row)
+  # Get the most similar municipality
+  municipality_data = sorted(municipalities, key=lambda x: jellyfish.jaro_winkler_similarity(municipality_name, x[4]), reverse=True)
+  if len(municipality_data) > 0:
+    municipality_data = municipality_data[0]
+    return (f'{municipality_data[1]}{municipality_data[2]}', municipality_data[4])
+  else:
+    return (None, None)

@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes, ApplicationBuilder
 from aemet import Aemet
 from datetime import datetime, timedelta
-from tools import get_ranges, get_full_translated_date
+from tools import get_ranges, get_full_translated_date, get_galician_most_similar_municipality_code
 
 # Set the Telegram bot token
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -41,7 +41,7 @@ def get_hourly_forecast_text(data, date):
   will_rain = False
   text += '\n🌧 Precipitación\n'
   filtered_data = {key: value for key, value in data["rain"].items() if float(key) >= init_hour and float(key) <= end_hour}
-  if int(max(filtered_data.values())) == 0:
+  if float(max(filtered_data.values())) == 0:
     text += 'Non se esperan precipitacións\n'
   else:
     will_rain = True
@@ -64,6 +64,24 @@ def get_hourly_forecast_text(data, date):
       text += f'🕐 Tarde: {data["rain_probability"]["1420"]}%\n'
     if '2002' in data["rain_probability"]:
       text += f'🕐 Noite: {data["rain_probability"]["2002"]}%\n\n'
+  # STORM
+  filtered_data = data["storm_probability"]
+  if int(max(filtered_data.values())) > 0:
+    text += '⛈ Tormentas:\n'
+    if '0208' in filtered_data and int(filtered_data["0208"]) > 0:
+      text += f'🕐 Madrugada: {filtered_data["0208"]}%\n'
+    if '0814' in filtered_data and int(filtered_data["0814"]) > 0:
+      text += f'🕐 Mañá: {filtered_data["0814"]}%\n'
+    if '1420' in filtered_data and int(filtered_data["1420"]) > 0:
+      text += f'🕐 Tarde: {filtered_data["1420"]}%\n'
+    if '2002' in filtered_data and int(filtered_data["2002"]) > 0:
+      text += f'🕐 Noite: {filtered_data["2002"]}%\n\n'
+  # WIND
+  filtered_data = {key: value for key, value in data["wind"].items() if int(key) >= init_hour and int(key) <= end_hour}
+  # Get max speed value
+  max_speed = max([int(value["speed"]) for value in filtered_data.values()])
+  if max_speed > 10:
+    text += f'🌬 Vento: Refacho máximo de {max_speed} km/h\n'
   return text
 
 def get_daily_forecast_text(data, date):
@@ -76,9 +94,10 @@ def get_daily_forecast_text(data, date):
   text += f'Mínima: {data["temperature"]["min"]}ºC (sensación térmica: {data["temperature_sensation"]["min"]}ºC)\n\n'
   # SKY STATE
   text += '☁️ Estado do ceo\n'
-  text += f'Pola mañá: {Aemet.get_sky_state_description(data["sky_state"]["06-12"]["sky_code"])}\n'
-  text += f'Pola tarde: {Aemet.get_sky_state_description(data["sky_state"]["12-18"]["sky_code"])}\n'
-  text += f'Pola noite: {Aemet.get_sky_state_description(data["sky_state"]["18-24"]["sky_code"])}\n\n'
+  text += f'Pola madrigada (de 0 a 6h): {Aemet.get_sky_state_description(data["sky_state"]["00-06"]["sky_code"])}\n'
+  text += f'Pola mañá (de 6 a 12h): {Aemet.get_sky_state_description(data["sky_state"]["06-12"]["sky_code"])}\n'
+  text += f'Pola tarde (de 12 a 18h): {Aemet.get_sky_state_description(data["sky_state"]["12-18"]["sky_code"])}\n'
+  text += f'Pola noite (de 18 a 24h): {Aemet.get_sky_state_description(data["sky_state"]["18-24"]["sky_code"])}\n\n'
   # RAIN PROBABILITY
   will_rain = int(max(data["rain_probability"].values())) > 0
   if will_rain:
@@ -88,6 +107,16 @@ def get_daily_forecast_text(data, date):
     text += f'Pola noite: {data["rain_probability"]["18-24"]}%\n\n'
   else:
     text += 'Non se esperan precipitacións\n\n'
+  # WIND
+  # Get max speed value
+  # TODO: Get data by time range
+  max_speed = max([int(wind_data["speed"]) for wind_data in data["wind"].values()])
+  if max_speed > 10:
+    text += f'🌬 Vento: Refacho máximo de {max_speed} km/h\n'
+  # SNOW
+  max_snow_quota = {int(v) for v in data["snow_quota"].values() if v is not None}
+  if max_snow_quota and max(max_snow_quota) > 0:
+    text += f'🌨 Cota de neve: {max(max_snow_quota)} m\n'
   return text
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -100,7 +129,7 @@ async def prediccion(update: Update, context: ContextTypes.DEFAULT_TYPE):
   # Get municipality name and forecast
   municipality_name = ' '.join(context.args)
   # Get ,unicipality code
-  municipality_code, municipality_name = Aemet.most_similar_municipality_code(municipality_name)
+  municipality_code, municipality_name = get_galician_most_similar_municipality_code(municipality_name)
   if municipality_code is None:
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Non se atopou o concello.")
     return
@@ -117,7 +146,7 @@ async def tomorrow_prediccion(update: Update, context: ContextTypes.DEFAULT_TYPE
   # Get municipality name and forecast
   municipality_name = ' '.join(context.args)
   # Get ,unicipality code
-  municipality_code, municipality_name = Aemet.most_similar_municipality_code(municipality_name)
+  municipality_code, municipality_name = get_galician_most_similar_municipality_code(municipality_name)
   if municipality_code is None:
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Non se atopou o concello.")
     return
