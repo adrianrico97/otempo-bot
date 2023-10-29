@@ -1,13 +1,15 @@
 import logging
 import os
 from telegram import Update
-from telegram.ext import CommandHandler, ContextTypes, ApplicationBuilder
+from telegram.ext import CommandHandler, ContextTypes, ApplicationBuilder, MessageHandler
+from ptbcontrib.ptb_jobstores.mongodb import PTBMongoDBJobStore
 from aemet import Aemet
 from datetime import datetime, timedelta
 from tools import get_ranges, get_full_translated_date, get_galician_most_similar_municipality_code
 
 # Set the Telegram bot token
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+DB_URI = os.environ.get('MONGODB_URI')
 
 logging.basicConfig(
   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -94,12 +96,13 @@ def get_daily_forecast_text(data, date):
   text += f'Mínima: {data["temperature"]["min"]}ºC (sensación térmica: {data["temperature_sensation"]["min"]}ºC)\n\n'
   # SKY STATE
   text += '☁️ Estado do ceo\n'
-  text += f'Pola madrigada (de 0 a 6h): {Aemet.get_sky_state_description(data["sky_state"]["00-06"]["sky_code"])}\n'
+  text += f'Pola madrugada (de 0 a 6h): {Aemet.get_sky_state_description(data["sky_state"]["00-06"]["sky_code"])}\n'
   text += f'Pola mañá (de 6 a 12h): {Aemet.get_sky_state_description(data["sky_state"]["06-12"]["sky_code"])}\n'
   text += f'Pola tarde (de 12 a 18h): {Aemet.get_sky_state_description(data["sky_state"]["12-18"]["sky_code"])}\n'
   text += f'Pola noite (de 18 a 24h): {Aemet.get_sky_state_description(data["sky_state"]["18-24"]["sky_code"])}\n\n'
   # RAIN PROBABILITY
-  will_rain = int(max(data["rain_probability"].values())) > 0
+  filtered_data = {k:v for k, v in dict(data["rain_probability"]).items() if v is not None}
+  will_rain = int(max(filtered_data.values())) > 0
   if will_rain:
     text += '💧 Probabilidade de choiva\n'
     text += f'Pola mañá: {data["rain_probability"]["06-12"]}%\n'
@@ -156,6 +159,33 @@ async def tomorrow_prediccion(update: Update, context: ContextTypes.DEFAULT_TYPE
   # Envía la predicción al chat privado del usuario
   await context.bot.send_message(chat_id=update.effective_chat.id, text=get_daily_forecast_text(data, date))
 
+async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
+  municipality_code = context.job.data['municipality_code']
+  # Get daily forecast from Aemet
+  date = datetime.today() + timedelta(days=1)
+  data = Aemet.get_daily_forecast(municipality_code, date)
+  # Envía la predicción al chat privado del usuario
+  await context.bot.send_message(chat_id=context.job.chat_id, text=get_daily_forecast_text(data, date))
+  # Schedule a new job for tomorroy
+  run_at = date.replace(hour=21, minute=0, second=0, microsecond=0)
+  context.job_queue.run_once(send_daily_report, run_at, data={'municipality_code': municipality_code}, chat_id=context.job.chat_id)
+
+async def schedule_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  chat_id = update.message.chat_id
+  # Get the municipality code
+  municipality_name = ' '.join(context.args)
+  # Get ,unicipality code
+  municipality_code, municipality_name = get_galician_most_similar_municipality_code(municipality_name)
+  # If it doesn't exist, send an error message
+  if municipality_code is None:
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Non se atopou o concello.")
+    return
+  # Schedule the job with the municipality code
+  today = datetime.now()
+  run_at = today.replace(hour=21, minute=0, second=0, microsecond=0)
+  context.job_queue.run_once(send_daily_report, run_at, data={'municipality_code': municipality_code}, chat_id=chat_id)
+  await context.bot.send_message(chat_id=chat_id, text=f'Envío de reporte diario configurado para {municipality_name}')
+
 def main():
     # Create the bot
     application = ApplicationBuilder().token(TOKEN).build()
@@ -163,6 +193,14 @@ def main():
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('tempo', prediccion))
     application.add_handler(CommandHandler('mana', tomorrow_prediccion))
+    application.add_handler(CommandHandler('reporte', schedule_report))
+    # Jobs manager
+    application.job_queue.scheduler.add_jobstore(
+        PTBMongoDBJobStore(
+            application=application,
+            host=DB_URI,
+        )
+    )
     # Run the bot
     application.run_polling()
 

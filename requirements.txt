@@ -2,11 +2,14 @@ anyio==4.0.0
 APScheduler==3.10.4
 certifi==2023.7.22
 charset-normalizer==3.3.0
+dnspython==2.4.2
 h11==0.14.0
 httpcore==0.17.3
 httpx==0.24.1
 idna==3.4
 jellyfish==1.0.1
+ptbcontrib @ git+https://github.com/python-telegram-bot/ptbcontrib.git@b3a6e3e2e5e0ed592944b3efc64b6162d0c90e08
+pymongo==4.5.0
 python-telegram-bot==20.5
 pytz==2023.3.post1
 requests==2.31.0

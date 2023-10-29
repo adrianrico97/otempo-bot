@@ -62,6 +62,8 @@ class Aemet:
     return Aemet.__parse_hourly_forecast(data, forecast_date)
 
   def get_sky_state_description(code, language='gal'):
+    if code is None:
+      return ''
     code = int(re.sub('n', '', code))
     return Aemet.SKY_STATE_CODES_DESCRIPTION[code][language]
 

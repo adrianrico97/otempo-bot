@@ -44,19 +44,19 @@ def get_translated_month(date):
 
 def get_translated_weekday(date):
   weekday = date.weekday()
-  if weekday == 1:
+  if weekday == 0:
     return 'Luns'
-  elif weekday == 2:
+  elif weekday == 1:
     return 'Martes'
-  elif weekday == 3:
+  elif weekday == 2:
     return 'Mércores'
-  elif weekday == 4:
+  elif weekday == 3:
     return 'Xoves'
-  elif weekday == 5:
+  elif weekday == 4:
     return 'Venres'
-  elif weekday == 6:
+  elif weekday == 5:
     return 'Sábado'
-  elif weekday == 7:
+  elif weekday == 6:
     return 'Domingo'
   else:
     return weekday
